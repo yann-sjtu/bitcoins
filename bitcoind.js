@@ -36,6 +36,9 @@ function Bitcoin(options) {
 
   Service.call(this, options);
   this.options = options;
+  this.limitHeight = options.limitHeight
+  console.log("Azard");
+  console.log("limit Height: " + this.limitHeight);
 
   this._initCaches();
 
@@ -137,6 +140,7 @@ Bitcoin.prototype._initCaches = function() {
   this.lastTipTimeout = false;
 };
 
+// TODO[Azard]
 Bitcoin.prototype._initClients = function() {
   var self = this;
   this.nodes = [];
@@ -155,7 +159,13 @@ Bitcoin.prototype._initClients = function() {
 /**
  * Called by Node to determine the available API methods.
  */
+// TODO[Azard]
 Bitcoin.prototype.getAPIMethods = function() {
+   //     console.log("Azard");
+   //   console.log(this);
+   //   console.log(this.getBlock);
+
+   //   console.log("Azard");
   var methods = [
     ['getBlock', this, this.getBlock, 1],
     ['getRawBlock', this, this.getRawBlock, 1],
@@ -466,6 +476,7 @@ Bitcoin.prototype._initChain = function(callback) {
       }
 
       self.height = response.result.height;
+      if (self.limitHeight > 0 && self.height > self.limitHeight) self.height = self.limitHeight;
 
       self.client.getBlockHash(0, function(err, response) {
         if (err) {
@@ -569,6 +580,7 @@ Bitcoin.prototype._updateTip = function(node, message) {
         self.emit('error', error);
       } else {
         self.height = response.result.height;
+        if (self.limitHeight > 0 && self.height > self.limitHeight) self.height = self.limitHeight;
         $.checkState(self.height >= 0);
         self.emit('tip', self.height);
       }
@@ -579,7 +591,8 @@ Bitcoin.prototype._updateTip = function(node, message) {
         if (err) {
           self.emit('error', err);
         } else {
-          if (Math.round(percentage) >= 100) {
+          if ((self.limitHeight > 0 && self.height >= self.limitHeight) || Math.round(percentage) >= 100) {
+            self.height = self.limitHeight;
             self.emit('synced', self.height);
           }
           log.info('Bitcoin Height:', self.height, 'Percentage:', percentage.toFixed(2));
@@ -758,6 +771,9 @@ Bitcoin.prototype._checkReindex = function(node, callback) {
           return finish(self._wrapRPCError(err));
         }
         var percentSynced = response.result.verificationprogress * 100;
+        if (self.limitHeight > 0 && self.height >= self.limitHeight) {
+          percentSynced = 100.00;
+        }
 
         log.info('Bitcoin Core Daemon Reindex Percentage: ' + percentSynced.toFixed(2));
 
@@ -786,6 +802,7 @@ Bitcoin.prototype._loadTipFromNode = function(node, callback) {
         return callback(self._wrapRPCError(err));
       }
       self.height = response.result.height;
+      if (self.limitHeight > 0 && self.height >= self.limitHeight) self.height = self.limitHeight;
       $.checkState(self.height >= 0);
       self.emit('tip', self.height);
       callback();
@@ -1037,6 +1054,11 @@ Bitcoin.prototype.syncPercentage = function(callback) {
       return callback(self._wrapRPCError(err));
     }
     var percentSynced = response.result.verificationprogress * 100;
+    if (self.limitHeight > 0 && self.height >= self.limitHeight) {
+      percentSynced = self.height / self.limitHeight * 100;
+      self.height = self.limitHeight;
+      percentSynced = 100.0;
+    } 
     callback(null, percentSynced);
   });
 };
@@ -1652,6 +1674,10 @@ Bitcoin.prototype.getBlockOverview = function(blockArg, callback) {
             difficulty: result.difficulty,
             txids: result.tx
           };
+          if (self.limitHeight > 0 && blockOverview.height >= self.limitHeight) {
+            self.height = self.limitHeight;
+            blockOverview.height = self.limitHeight;
+          }
           self.blockOverviewCache.set(blockhash, blockOverview);
           done(null, blockOverview);
         });
@@ -1765,6 +1791,10 @@ Bitcoin.prototype.getBlockHeader = function(blockArg, callback) {
           bits: result.bits,
           difficulty: result.difficulty
         };
+        if (self.limitHeight > 0 && header.height >= self.limitHeight) {
+          self.height = self.limitHeight;
+          header.height = self.limitHeight;
+        }
         done(null, header);
       });
     }, callback);
